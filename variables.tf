@@ -65,11 +65,11 @@ variable "startup_script" {
 
 variable "access_config" {
   description = "The access config block for the instances. Set to [] to remove external IP."
-  type        = object({
+  type = object({
     nat_ip       = string
     network_tier = string
   })
-  default     = {
+  default = {
     nat_ip       = null
     network_tier = null
   }
@@ -108,7 +108,7 @@ variable "wait_for_instances" {
 
 variable "update_policy" {
   description = "The upgrade policy to apply when the instance template changes."
-  type        = object({
+  type = object({
     type                    = string
     minimal_action          = string
     max_surge_fixed         = number
@@ -117,7 +117,7 @@ variable "update_policy" {
     max_unavailable_percent = number
     min_ready_sec           = number
   })
-  default     = {
+  default = {
     type                    = "PROACTIVE"
     minimal_action          = "REPLACE"
     max_surge_fixed         = null
@@ -262,14 +262,14 @@ variable "autoscaling_cpu" {
 
 variable "autoscaling_metric" {
   description = "Autoscaling, metric policy block as single element array. https://www.terraform.io/docs/providers/google/r/compute_autoscaler.html#metric"
-  type        = object({
+  type = object({
     name                       = string
     single_instance_assignment = string
     target                     = string
     type                       = string
     filter                     = string
   })
-  default     = {
+  default = {
     name                       = null
     single_instance_assignment = null
     target                     = null
