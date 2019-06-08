@@ -65,11 +65,14 @@ variable "startup_script" {
 
 variable "access_config" {
   description = "The access config block for the instances. Set to [] to remove external IP."
-  type        = "list"
-
-  default = [
-    {},
-  ]
+  type        = object({
+    nat_ip       = string
+    network_tier = string
+  })
+  default     = {
+    nat_ip       = null
+    network_tier = null
+  }
 }
 
 variable "metadata" {
@@ -105,8 +108,24 @@ variable "wait_for_instances" {
 
 variable "update_policy" {
   description = "The upgrade policy to apply when the instance template changes."
-  type        = "list"
-  default     = []
+  type        = object({
+    type                    = string
+    minimal_action          = string
+    max_surge_fixed         = number
+    max_surge_percent       = number
+    max_unavailable_fixed   = number
+    max_unavailable_percent = number
+    min_ready_sec           = number
+  })
+  default     = {
+    type                    = "PROACTIVE"
+    minimal_action          = "REPLACE"
+    max_surge_fixed         = null
+    max_surge_percent       = null
+    max_unavailable_fixed   = null
+    max_unavailable_percent = null
+    min_ready_sec           = null
+  }
 }
 
 variable "service_port" {
@@ -237,20 +256,32 @@ variable "cooldown_period" {
 
 variable "autoscaling_cpu" {
   description = "Autoscaling, cpu utilization policy block as single element array. https://www.terraform.io/docs/providers/google/r/compute_autoscaler.html#cpu_utilization"
-  type        = "list"
-  default     = []
+  type        = "string"
+  default     = null
 }
 
 variable "autoscaling_metric" {
   description = "Autoscaling, metric policy block as single element array. https://www.terraform.io/docs/providers/google/r/compute_autoscaler.html#metric"
-  type        = "list"
-  default     = []
+  type        = object({
+    name                       = string
+    single_instance_assignment = string
+    target                     = string
+    type                       = string
+    filter                     = string
+  })
+  default     = {
+    name                       = null
+    single_instance_assignment = null
+    target                     = null
+    type                       = null
+    filter                     = null
+  }
 }
 
 variable "autoscaling_lb" {
   description = "Autoscaling, load balancing utilization policy block as single element array. https://www.terraform.io/docs/providers/google/r/compute_autoscaler.html#load_balancing_utilization"
-  type        = "list"
-  default     = []
+  type        = "string"
+  default     = null
 }
 
 /* Health checks */

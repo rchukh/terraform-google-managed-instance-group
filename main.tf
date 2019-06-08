@@ -22,14 +22,17 @@ resource "google_compute_instance_template" "default" {
 
   region = "${var.region}"
 
-  tags = ["${concat(list("allow-ssh"), var.target_tags)}"]
+  tags = concat(list("allow-ssh"), var.target_tags)
 
   labels = "${var.instance_labels}"
 
   network_interface {
     network            = "${var.subnetwork == "" ? var.network : ""}"
     subnetwork         = "${var.subnetwork}"
-    access_config      = ["${var.access_config}"]
+    access_config {
+      nat_ip       = var.access_config.nat_ip
+      network_tier = var.access_config.network_tier
+    }
     network_ip         = "${var.network_ip}"
     subnetwork_project = "${var.subnetwork_project == "" ? var.project : var.subnetwork_project}"
   }
@@ -47,14 +50,14 @@ resource "google_compute_instance_template" "default" {
   }
 
   service_account {
-    email  = "${var.service_account_email}"
-    scopes = ["${var.service_account_scopes}"]
+    email  = var.service_account_email
+    scopes = var.service_account_scopes
   }
 
-  metadata = "${merge(
-    map("startup-script", "${var.startup_script}", "tf_depends_id", "${var.depends_id}"),
-    var.metadata
-  )}"
+  metadata = merge(
+  map("startup-script", var.startup_script, "tf_depends_id", var.depends_id),
+  var.metadata
+  )
 
   scheduling {
     preemptible       = "${var.preemptible}"
@@ -67,6 +70,7 @@ resource "google_compute_instance_template" "default" {
 }
 
 resource "google_compute_instance_group_manager" "default" {
+  provider           = "google-beta"
   count              = "${var.module_enabled && var.zonal ? 1 : 0}"
   project            = "${var.project}"
   name               = "${var.name}"
@@ -76,13 +80,22 @@ resource "google_compute_instance_group_manager" "default" {
 
   version {
     name              = "${var.name}-default"
-    instance_template = "${google_compute_instance_template.default.self_link}"
+    instance_template = google_compute_instance_template.default[0].self_link
   }
 
-  zone          = "${var.zone}"
-  update_policy = "${var.update_policy}"
+  zone = "${var.zone}"
 
-  target_pools = ["${var.target_pools}"]
+  update_policy {
+    type                    = var.update_policy.type
+    minimal_action          = var.update_policy.minimal_action
+    max_surge_fixed         = var.update_policy.max_surge_fixed
+    max_surge_percent       = var.update_policy.max_surge_percent
+    max_unavailable_fixed   = var.update_policy.max_unavailable_fixed
+    max_unavailable_percent = var.update_policy.max_unavailable_percent
+    min_ready_sec           = var.update_policy.min_ready_sec
+  }
+
+  target_pools = var.target_pools
 
   // There is no way to unset target_size when autoscaling is true so for now, jsut use the min_replicas value.
   // Issue: https://github.com/terraform-providers/terraform-provider-google/issues/667
@@ -93,7 +106,7 @@ resource "google_compute_instance_group_manager" "default" {
     port = "${var.service_port}"
   }
 
-  auto_healing_policies = {
+  auto_healing_policies {
     health_check      = "${var.http_health_check ? element(concat(google_compute_health_check.mig-health-check.*.self_link, list("")), 0) : ""}"
     initial_delay_sec = "${var.hc_initial_delay}"
   }
@@ -110,19 +123,30 @@ resource "google_compute_instance_group_manager" "default" {
 }
 
 resource "google_compute_autoscaler" "default" {
-  count   = "${var.module_enabled && var.autoscaling && var.zonal ? 1 : 0}"
-  name    = "${var.name}"
-  zone    = "${var.zone}"
-  project = "${var.project}"
-  target  = "${google_compute_instance_group_manager.default.self_link}"
+  provider = "google-beta"
+  count    = "${var.module_enabled && var.autoscaling && var.zonal ? 1 : 0}"
+  name     = "${var.name}"
+  zone     = "${var.zone}"
+  project  = "${var.project}"
+  target   = google_compute_instance_group_manager.default[0].self_link
 
-  autoscaling_policy = {
-    max_replicas               = "${var.max_replicas}"
-    min_replicas               = "${var.min_replicas}"
-    cooldown_period            = "${var.cooldown_period}"
-    cpu_utilization            = ["${var.autoscaling_cpu}"]
-    metric                     = ["${var.autoscaling_metric}"]
-    load_balancing_utilization = ["${var.autoscaling_lb}"]
+  autoscaling_policy {
+    max_replicas    = "${var.max_replicas}"
+    min_replicas    = "${var.min_replicas}"
+    cooldown_period = "${var.cooldown_period}"
+    cpu_utilization {
+      target = var.autoscaling_cpu
+    }
+    metric {
+      name                       = var.autoscaling_metric.name
+      single_instance_assignment = var.autoscaling_metric.single_instance_assignment
+      target                     = var.autoscaling_metric.target
+      type                       = var.autoscaling_metric.type
+      filter                     = var.autoscaling_metric.filter
+    }
+    load_balancing_utilization {
+      target = var.autoscaling_lb
+    }
   }
 }
 
@@ -141,6 +165,7 @@ locals {
 }
 
 resource "google_compute_region_instance_group_manager" "default" {
+  provider           = "google-beta"
   count              = "${var.module_enabled && ! var.zonal ? 1 : 0}"
   project            = "${var.project}"
   name               = "${var.name}"
@@ -151,16 +176,25 @@ resource "google_compute_region_instance_group_manager" "default" {
 
   version {
     name              = "${var.name}-default"
-    instance_template = "${google_compute_instance_template.default.self_link}"
+    instance_template = google_compute_instance_template.default[0].self_link
   }
 
   region = "${var.region}"
 
-  update_policy = "${var.update_policy}"
+  update_policy {
+    type                    = var.update_policy.type
+    minimal_action          = var.update_policy.minimal_action
+    max_surge_fixed         = var.update_policy.max_surge_fixed
+    max_surge_percent       = var.update_policy.max_surge_percent
+    max_unavailable_fixed   = var.update_policy.max_unavailable_fixed
+    max_unavailable_percent = var.update_policy.max_unavailable_percent
+    min_ready_sec           = var.update_policy.min_ready_sec
+  }
 
-  distribution_policy_zones = ["${local.distribution_zones["${length(var.distribution_policy_zones) == 0 ? "default" : "user"}"]}"]
+  distribution_policy_zones = [
+    "${local.distribution_zones["${length(var.distribution_policy_zones) == 0 ? "default" : "user"}"]}"]
 
-  target_pools = ["${var.target_pools}"]
+  target_pools = var.target_pools
 
   // There is no way to unset target_size when autoscaling is true so for now, jsut use the min_replicas value.
   // Issue: https://github.com/terraform-providers/terraform-provider-google/issues/667
@@ -187,25 +221,36 @@ resource "google_compute_region_instance_group_manager" "default" {
   }
 
   // Initial instance verification can take 10-15m when a health check is present.
-  timeouts = {
+  timeouts {
     create = "${var.http_health_check ? "15m" : "5m"}"
   }
 }
 
 resource "google_compute_region_autoscaler" "default" {
-  count   = "${var.module_enabled && var.autoscaling && ! var.zonal ? 1 : 0}"
-  name    = "${var.name}"
-  region  = "${var.region}"
-  project = "${var.project}"
-  target  = "${google_compute_region_instance_group_manager.default.self_link}"
+  provider = "google-beta"
+  count    = "${var.module_enabled && var.autoscaling && ! var.zonal ? 1 : 0}"
+  name     = "${var.name}"
+  region   = "${var.region}"
+  project  = "${var.project}"
+  target   = google_compute_region_instance_group_manager.default[0].self_link
 
-  autoscaling_policy = {
-    max_replicas               = "${var.max_replicas}"
-    min_replicas               = "${var.min_replicas}"
-    cooldown_period            = "${var.cooldown_period}"
-    cpu_utilization            = ["${var.autoscaling_cpu}"]
-    metric                     = ["${var.autoscaling_metric}"]
-    load_balancing_utilization = ["${var.autoscaling_lb}"]
+  autoscaling_policy {
+    max_replicas    = "${var.max_replicas}"
+    min_replicas    = "${var.min_replicas}"
+    cooldown_period = "${var.cooldown_period}"
+    cpu_utilization {
+      target = var.autoscaling_cpu
+    }
+    metric {
+      name                       = var.autoscaling_metric.name
+      single_instance_assignment = var.autoscaling_metric.single_instance_assignment
+      target                     = var.autoscaling_metric.target
+      type                       = var.autoscaling_metric.type
+      filter                     = var.autoscaling_metric.filter
+    }
+    load_balancing_utilization {
+      target = var.autoscaling_lb
+    }
   }
 }
 
@@ -238,7 +283,7 @@ resource "google_compute_firewall" "default-ssh" {
     ports    = ["22"]
   }
 
-  source_ranges = ["${var.ssh_source_ranges}"]
+  source_ranges = var.ssh_source_ranges
   target_tags   = ["allow-ssh"]
 }
 
@@ -270,7 +315,7 @@ resource "google_compute_firewall" "mig-health-check" {
   }
 
   source_ranges = ["130.211.0.0/22", "35.191.0.0/16"]
-  target_tags   = ["${var.target_tags}"]
+  target_tags   = var.target_tags
 }
 
 data "google_compute_instance_group" "zonal" {
