@@ -156,11 +156,6 @@ data "google_compute_zones" "available" {
 }
 
 locals {
-  distribution_zones = {
-    default = [data.google_compute_zones.available.names]
-    user    = [var.distribution_policy_zones]
-  }
-
   dependency_id = concat(null_resource.region_dummy_dependency.*.id, list("disabled"))[0]
 }
 
@@ -191,8 +186,7 @@ resource "google_compute_region_instance_group_manager" "default" {
     min_ready_sec           = var.update_policy.min_ready_sec
   }
 
-  distribution_policy_zones = [
-  "${local.distribution_zones["${length(var.distribution_policy_zones) == 0 ? "default" : "user"}"]}"]
+  distribution_policy_zones = length(var.distribution_policy_zones) > 0 ? var.distribution_policy_zones : data.google_compute_zones.available.names
 
   target_pools = var.target_pools
 
